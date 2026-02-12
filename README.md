@@ -267,4 +267,4 @@ pip install -r requirements.txt
 ---
 
 ## License
-MIT
+Distributed under the [MIT License](LICENSE).
