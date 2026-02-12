@@ -17,6 +17,8 @@ from watchdog.events import FileSystemEventHandler
 # If modifying these scopes, delete the file token.pickle.
 SCOPES = ['https://www.googleapis.com/auth/photoslibrary.appendonly']
 
+TOKEN_LOCK = threading.Lock()
+
 def authenticate_google_photos():
     creds = None
     if os.path.exists('token.pickle'):
@@ -40,6 +42,26 @@ def authenticate_google_photos():
 
     return creds
 
+def refresh_credentials(creds):
+    """Refreshes credentials and saves to disk in a thread-safe manner."""
+    with TOKEN_LOCK:
+        # Check if another thread already refreshed while we were waiting for the lock
+        # This is not perfect but helps reduce API calls.
+        if creds.expired and creds.refresh_token:
+            try:
+                creds.refresh(Request())
+                with open('token.pickle', 'wb') as token:
+                    pickle.dump(creds, token)
+                return True
+            except Exception as e:
+                tqdm.write(f"Failed to refresh token: {e}")
+        else:
+            # If creds are already valid, someone else likely refreshed them
+            if creds.valid:
+                return True
+            tqdm.write("Credentials expired and no refresh token available.")
+    return False
+
 class ProgressBarFile:
     def __init__(self, filepath, pbar):
         self.filepath = filepath
@@ -59,26 +81,37 @@ class ProgressBarFile:
         self.file.close()
 
 def upload_media(creds, file_path, pbar):
-    """Uploads the media file and returns an upload token."""
+    """Uploads the media file and returns an upload token. Retries once on 401."""
     upload_url = 'https://photoslibrary.googleapis.com/v1/uploads'
     
     filename = os.path.basename(file_path)
     encoded_filename = urllib.parse.quote(filename)
     
-    headers = {
-        'Authorization': f'Bearer {creds.token}',
-        'Content-Type': 'application/octet-stream',
-        'X-Google-Upload-File-Name': encoded_filename,
-        'X-Google-Upload-Protocol': 'raw',
-    }
+    def perform_upload():
+        headers = {
+            'Authorization': f'Bearer {creds.token}',
+            'Content-Type': 'application/octet-stream',
+            'X-Google-Upload-File-Name': encoded_filename,
+            'X-Google-Upload-Protocol': 'raw',
+        }
+        pbar_file = ProgressBarFile(file_path, pbar)
+        try:
+            return requests.post(upload_url, headers=headers, data=pbar_file)
+        finally:
+            pbar_file.close()
 
-    pbar_file = ProgressBarFile(file_path, pbar)
-
-    try:
-        response = requests.post(upload_url, headers=headers, data=pbar_file)
-    finally:
-        pbar_file.close()
+    response = perform_upload()
     
+    # Reactive refresh on 401
+    if response.status_code == 401:
+        tqdm.write("Access token expired during upload. Refreshing and retrying...")
+        if refresh_credentials(creds):
+            # pbar.n might be ahead, but usually, small files or recent chunks. 
+            # For simplicity, we just retry the whole file. 
+            # We must reset pbar for the retry.
+            pbar.reset()
+            response = perform_upload()
+
     if response.status_code == 200:
         return response.text
     else:
@@ -91,10 +124,6 @@ def register_media_items_batch(creds, items):
         return []
 
     create_url = 'https://photoslibrary.googleapis.com/v1/mediaItems:batchCreate'
-    headers = {
-        'Authorization': f'Bearer {creds.token}',
-        'Content-Type': 'application/json',
-    }
     
     new_media_items = []
     for token, path in items:
@@ -107,12 +136,26 @@ def register_media_items_batch(creds, items):
 
     body = {"newMediaItems": new_media_items}
     
+    def perform_registration():
+        headers = {
+            'Authorization': f'Bearer {creds.token}',
+            'Content-Type': 'application/json',
+        }
+        return requests.post(create_url, headers=headers, json=body)
+
     max_retries = 5
     retry_delay = 2
     
     for attempt in range(max_retries):
         try:
-            response = requests.post(create_url, headers=headers, json=body)
+            response = perform_registration()
+            
+            # Reactive refresh on 401
+            if response.status_code == 401:
+                tqdm.write("Access token expired during registration. Refreshing and retrying...")
+                if refresh_credentials(creds):
+                    response = perform_registration()
+
             if response.status_code == 429:
                 tqdm.write(f"Rate limit hit during registration. Retrying in {retry_delay}s... (Attempt {attempt+1}/{max_retries})")
                 time.sleep(retry_delay)

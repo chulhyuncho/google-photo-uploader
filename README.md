@@ -28,6 +28,7 @@ Recently, while exploring "AI Vibe Coding", I found the process of quickly build
 - **Batched Registration**: Minimizes API calls by grouping up to 50 items.
 - **Resilience**: Exponential backoff for `429 Too Many Requests` errors.
 - **Storage Optimization**: Deletes local files and empty parent folders after successful upload.
+- **Smart Authentication**: Reactive token refresh with automatic retry only when 401 Unauthorized occurs (zero overhead during normal operation).
 - **Real-time Monitoring**: Use `--watch` to monitor folders indefinitely.
 
 ### Installation & Setup
@@ -94,6 +95,7 @@ pip install -r requirements.txt
 - **배치 등록**: 최대 50개 항목을 묶어 API 호출을 최소화하고 쿼터를 효율적으로 관리합니다.
 - **탄력적 대응**: `429 Too Many Requests` 오류 발생 시 지수 백오프 자동 적용.
 - **저장 공간 최적화**: 업로드 성공 후 로컬 파일 및 빈 상위 폴더를 자동으로 삭제합니다.
+- **지능형 인증**: 401 Unauthorized 에러 발생 시에만 토큰을 자동 갱신하고 재시도 (평상시 오버헤드 0%).
 - **실시간 감시**: `--watch` 옵션으로 새로운 파일을 실시간으로 감지하고 업로드합니다.
 
 ### 설치 및 설정
@@ -159,6 +161,7 @@ pip install -r requirements.txt
 - **批量注册**：每次最多合并 50 个项目进行注册，减少 API 调用次数。
 - **容错机制**：针对 `429 Too Many Requests` 错误自动执行指数退避重试。
 - **存储优化**：上传成功后自动删除本地文件及空的父文件夹。
+- **智能认证**：仅在出现 401 Unauthorized 错误时才自动刷新令牌并重试（正常运行期间零开销）。
 - **实时监控**：使用 `--watch` 参数实时监测并上传新文件。
 
 ### 安装与设置
@@ -225,6 +228,7 @@ pip install -r requirements.txt
 - **バッチ登録**: 最大 50 項目をまとめて登録し、API 呼び出し回数を削減。
 - **エラー耐性**: `429 Too Many Requests` エラー時の指数バックオフによる自動再試行。
 - **ストレージ最適化**: アップロード成功後、ローカルファイルと空の親フォルダを自動削除。
+- **インテリジェント認証**: 401 Unauthorized エラー発生時のみトークンを自動更新して再試行（通常時はオーバーヘッド・ゼロ）。
 - **リアルタイム監視**: `--watch` オプションでフォルダを監視し、新規ファイルを自動アップロード。
 
 ### インストールと設定
